@@ -1,0 +1,453 @@
+{% extends "layout-basic.html" %} {% block title %}{{ __('Stream') }}: {{ __('Current') }}{% endblock %}{% block head %}
+<link rel="stylesheet" href="/ranks/static/ranks.css?{{ serverInfo['release_version'] | urlencode }}"></link>
+<script src="/ranks/static/gsap-3.11.0/gsap.min.js"></script>
+
+<script type="text/javascript" charset="utf-8">
+	var data_dependencies = [
+		'all_languages',
+		'language',
+		'leaderboard',
+		'race_status',
+		'current_heat'
+	];
+
+	var pilotColors = {};
+	var winner = undefined;
+	var winnerColor = "#aaaaaa";
+	var winnerContrastColor = "#000000";
+	var oldLeaderboard = {};
+	var oldLeaderboardMeta;
+	var heatNodes = {};
+
+	rotorhazard.show_messages = false;
+
+	var request_time;
+	var request_pi_time;
+	var resume_check = true;
+
+	/* Leaderboards */
+	function build_leaderboard(leaderboard, display_type, meta, leaderboardHeatNodes, display_starts=false) {
+		if (typeof(display_type) === 'undefined')
+			display_type = 'by_race_time';
+		if (typeof(meta) === 'undefined') {
+			meta = new Object;
+			meta.team_racing_mode = false;
+			meta.start_behavior = 0;
+		}
+
+		if (meta.start_behavior == 2) {
+			var total_label = __('Laps Total');
+		} else {
+			var total_label = __('Total');
+		}
+
+		var twrap = $('<div class="responsive-wrap">');
+		var table = $('<div class="leaderboard">');
+		var header = $('<div>');
+		var header_row = $('<div class="pilot-row">');
+		header_row.append('<div class="pos"><span class="screen-reader-text">' + __('Rank') + '</span></th>');
+		header_row.append('<div class="pilot">' + __('Pilot') + '</div>');
+		if (meta.team_racing_mode) {
+			header_row.append('<div class="team">' + __('Team') + '</div>');
+		}
+		if (display_starts == true) {
+			header_row.append('<div class="starts">' + __('Starts') + '</div>');
+		}
+		if (display_type == 'by_race_time' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+		}
+		if (display_type == 'by_fastest_lap' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+		}
+		if (display_type == 'by_consecutives' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+		}
+		//
+
+		var body = $('<div>');
+		var header = $('<div class="standings-header">');
+		header.append('<div class="pilot"> Lap '+ leaderboard[0].laps +'</div>');
+		table.append(header);
+		for (var i in leaderboard) {
+			var node = leaderboard[i].node;
+			var pilot_id = leaderboard[i].pilot_id;
+			var pilotColor = "#00ff00";
+			for (const key in leaderboardHeatNodes) {
+				if(leaderboardHeatNodes[key].pilot_id==pilot_id){
+					pilotColor = leaderboardHeatNodes[key].pilotColor;
+				}
+			}
+			var row = $('<div class="pilot-row" data-node="'+ node +'">');
+
+			row.append(`<div class="pos" style="background-color:${pilotColor}"> ${leaderboard[i].position!=null ? leaderboard[i].position : "-"}</div>`);
+			//row.append('<div class="pos" style="background-color:'+pilotColor+'"> '+leaderboard[i].position+'</div>');
+			row.append('<div class="pilot">'+ leaderboard[i].callsign +'</div>');
+			if (meta.team_racing_mode) {
+				row.append('<div class="team">'+ leaderboard[i].team_name +'</div>');
+			}
+			if (display_starts == true) {
+				row.append('<div class="starts">'+ leaderboard[i].starts +'</div>');
+			}
+			if (display_type == 'by_race_time' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+				var lap = leaderboard[i].laps;
+				if (!lap || lap == '0:00.000')
+					lap = '&#8212;';
+
+				if (meta.start_behavior == 2) {
+					var lap = leaderboard[i].total_time_laps;
+				} else {
+					var lap = leaderboard[i].total_time;
+				}
+				if (!lap || lap == '0:00.000')
+					lap = '&#8212;';
+
+				var lap = leaderboard[i].average_lap;
+				if (!lap || lap == '0:00.000')
+					lap = '&#8212;';
+			}
+			if (display_type == 'by_fastest_lap' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+				var lap = leaderboard[i].fastest_lap;
+				if (!lap || lap == '0:00.000')
+					lap = '&#8212;';
+				if (leaderboard[i].fastest_lap_source) {
+					var source = leaderboard[i].fastest_lap_source;
+
+					if (source.note) {
+						var source_text = source.note
+					} else {
+						var source_text = __('Heat') + ' ' + source.heat;
+					}
+					source_text += ' / ' + __('Round') + ' ' + source.round;
+
+					row.data('source', source_text);
+					row.attr('title', source_text);
+				}
+
+			}
+			if (display_type == 'by_consecutives' ||
+			display_type == 'heat' ||
+			display_type == 'round' ||
+			display_type == 'current') {
+				var lap = leaderboard[i].consecutives;
+				if (!lap || lap == '0:00.000')
+					lap = '&#8212;';
+				if (leaderboard[i].consecutives_source) {
+					var source = leaderboard[i].consecutives_source;
+					if (source.note) {
+						var source_text = source.note;
+					} else {
+						var source_text = __('Heat') + ' ' + source.heat;
+					}
+					source_text += ' / ' + __('Round') + ' ' + source.round;
+
+					row.data('source', source_text);
+					row.attr('title', source_text);
+				}
+			}
+
+			table.append(row);
+		}
+		table.append(body);
+		twrap.append(table);
+		return twrap;
+	}
+
+	$(document).ready(function () {// get pi time
+		rotorhazard.pi_time_request = window.performance.now();
+		socket.emit('get_pi_time');
+
+		socket.on('pi_time', function (msg) {
+			var response_time = window.performance.now();
+			var server_delay = response_time - rotorhazard.pi_time_request;
+			var server_oneway = server_delay ? server_delay / 2 : server_delay;
+
+			var pi_time_diff = {
+				'differential': (msg.pi_time_s * 1000) - response_time - server_oneway, // convert seconds (pi) to millis (JS)
+				'response': parseFloat(server_delay)
+			}
+
+			// store sync sample
+			rotorhazard.pi_time_diff_samples.push(pi_time_diff);
+
+			// sort stored samples
+			rotorhazard.pi_time_diff_samples.sort(function(a, b){
+				return a.response - b.response;
+			})
+
+			// remove unusable samples
+			var diff_min = rotorhazard.pi_time_diff_samples[0].differential - rotorhazard.pi_time_diff_samples[0].response
+			var diff_max = rotorhazard.pi_time_diff_samples[0].differential + rotorhazard.pi_time_diff_samples[0].response
+
+			rotorhazard.pi_time_diff_samples = rotorhazard.pi_time_diff_samples.filter(function(value, index, array) {
+				return value.differential >= diff_min && value.differential <= diff_max;
+			});
+
+			// get filtered value
+			var a = [];
+			for (var i in rotorhazard.pi_time_diff_samples) {
+				a.push(rotorhazard.pi_time_diff_samples[i].differential);
+			}
+			rotorhazard.pi_time_diff = median(a);
+
+			// pass current sync to timer
+			rotorhazard.timer.race.sync(rotorhazard.race_start_pi, rotorhazard.pi_time_diff);
+
+			// continue sampling for sync to improve accuracy
+			if (rotorhazard.pi_time_diff_samples.length < 10) {
+				setTimeout(function(){
+					rotorhazard.pi_time_request = window.performance.now();
+					socket.emit('get_pi_time');
+				}, (Math.random() * 500) + 250); // 0.25 to 0.75s delay
+			}
+
+			// update server info
+			var a = Infinity;
+			for (var i in rotorhazard.pi_time_diff_samples) {
+				a = Math.min(a, rotorhazard.pi_time_diff_samples[i].response);
+			}
+			$('#server-lag').html('<p>Sync quality: within ' + a + 'ms (' + rotorhazard.pi_time_diff_samples.length + ' samples)</p>');
+		});
+
+		socket.on('language', function (msg) {
+			if (msg.language) {
+				rotorhazard.interface_language = msg.language;
+			}
+		});
+
+		// set up node local store
+		for (i = 0; i < {{ num_nodes }}; i++) {
+			rotorhazard.nodes[i] = new nodeModel();
+		}
+
+		socket.on('race_scheduled', function (msg) {
+			if (msg.scheduled) {
+				var deferred_start = msg.scheduled_at * 1000;  // convert seconds (pi) to millis (JS)
+				rotorhazard.timer.deferred.start(deferred_start, rotorhazard.pi_time_diff);
+			} else {
+				rotorhazard.timer.deferred.stop();
+			}
+		});
+
+		socket.on('race_status', function (msg) {
+			switch (msg.race_status) {
+				case 1: // Race running
+					rotorhazard.race_status_go_time = window.performance.now();
+					$('body').addClass('race-running');
+					$('body').removeClass('race-stopped');
+					$('body').removeClass('race-new');
+					$('.timing-clock').removeClass('staging');
+					break;
+				case 2: // Race stopped, clear or save laps
+					$('body').removeClass('race-running');
+					$('body').addClass('race-stopped');
+					$('body').removeClass('race-new');
+					$('.timing-clock').removeClass('staging');
+					break;
+				case 3: // staging
+					$('body').removeClass('race-stopped');
+					$('body').addClass('race-running');
+					$('body').removeClass('race-new');
+					$('.timing-clock').addClass('staging');
+					break;
+				default: // Waiting to start new race
+					oldLeaderboard = {};
+					break;
+			}
+
+			resume_check = false;
+		});
+
+		socket.on('heartbeat', function (msg) {
+		});
+
+		socket.emit('load_data', {'load_types': ['pilot_data']}
+		);
+
+		socket.on('current_heat', function (msg) {
+			heatNodes = msg.heatNodes;
+		});
+
+		socket.on('leaderboard', function (msg) {
+			const fadeIn = (pilotrows) => {
+				pilotrows.forEach((pilotrow, i) => {
+					gsap.to(pilotrow, {
+						opacity: 1,
+						left: 0,
+						delay: i/5
+					});
+				});
+			}
+
+			const updateRows = (pilotrows) => {
+				pilotrows.forEach((pilotrow, i) => {
+					gsap.to(pilotrow, {
+						opacity: 1,
+						left: 0,
+						delay: 0,
+						duration: 0
+					});
+				});
+			}
+
+			const fadeOut = (pilotrows) => {
+				pilotrows.forEach((pilotrow, i) => {
+					gsap.to(pilotrow, {
+						opacity: 0,
+						left: 50,
+						delay: i/8
+					});
+				});
+			}
+
+			const diffReorder = (pilotrows) => {
+				pilotrows.forEach((pilotrow, i) => {
+					let ii = 0;
+					ii++;
+					gsap.to(pilotrow, {
+						opacity: 1,
+						left: 0,
+						delay: 0,
+						duration: 0
+					}).then(() => {
+					gsap.to(pilotrow, {
+						opacity: 0,
+						left: 50
+					}).then(() => {
+					gsap.to(pilotrow, {
+						opacity: 1,
+						left: 0
+					});
+					});
+					});
+				});
+			}
+
+			var race = msg.current;
+
+			//we are getting an update to the leaderboard
+			var newLeaderboard = race.leaderboard.by_race_time;
+
+			console.log("new race...");
+			console.log(newLeaderboard);
+			console.log("old race...");
+			console.log(oldLeaderboard);
+			//let's create a list of pilots who changed positions
+			var diffPilots = [];
+			if(!jQuery.isEmptyObject(newLeaderboard) && !jQuery.isEmptyObject(oldLeaderboard)){
+				newLeaderboard.forEach((item, index) => {
+					//if the old pilot is on this leaderboard
+					if (oldLeaderboard[index] !== undefined) {
+						var newPilotPosition = newLeaderboard[index].pilot_id;
+						var oldPilotPosition = oldLeaderboard[index].pilot_id;
+						if(newPilotPosition!=oldPilotPosition){
+							diffPilots.push(newLeaderboard[index].node);
+						}
+					//when heats change, the list may be different
+					}else{
+						diffPilots.push(newLeaderboard[index].node);
+					}
+				});
+			}
+
+			console.log("pilots who changed positions....",diffPilots);
+
+			var heatname = __('Heat') + ' ' + race.heat;
+			if (race.heat_note)
+				heatname = race.heat_note;
+			$('.current_heat').html(heatname);
+
+			leaderboard_type = race.leaderboard.meta.primary_leaderboard;
+			if(newLeaderboard!=oldLeaderboard){
+				if(diffPilots.length!=0){
+					console.log("CLEARING LEADERBOARD");
+					$('#leaderboard').empty();
+					$('#leaderboard').append(build_leaderboard(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, heatNodes));
+					newLeaderboard.forEach(function (item, index) {
+						if(diffPilots.includes(item.node)){
+							console.log("reordering pilot "+item.node)
+							var pilotRow = document.querySelectorAll('[data-node="'+item.node+'"]');
+							fadeIn(pilotRow);
+						}
+						else{
+							var pilotRow = document.querySelectorAll('[data-node="'+item.node+'"]');
+							updateRows(pilotRow);
+						}
+					});
+				}else{
+					if(jQuery.isEmptyObject(oldLeaderboard)){
+						$('#leaderboard').empty();
+						$('#leaderboard').append(build_leaderboard(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, heatNodes));
+					}else{
+						$('.standings-header > .pilot').html("Lap "+race.leaderboard[leaderboard_type][0].laps);
+					}
+
+				}
+
+			}
+			const pilotRows = document.querySelectorAll('data-node');
+			const standingsHeader = document.querySelectorAll('.standings-header');
+			if(diffPilots.length!=0 || jQuery.isEmptyObject(oldLeaderboard)){
+				//fadeIn(pilotRows);
+			}else{
+
+			}
+			updateRows(standingsHeader);
+
+
+
+			oldLeaderboard = newLeaderboard;
+			oldLeaderboardMeta = race.leaderboard.meta;
+
+
+			$('#team_leaderboard').empty();
+			if (race.team_leaderboard && 'meta' in race.team_leaderboard) {
+				leaderboard_type = race.team_leaderboard.meta.primary_leaderboard;
+				$('#team_leaderboard').append(build_team_leaderboard(race.team_leaderboard[leaderboard_type], leaderboard_type, race.team_leaderboard.meta));
+				$('#team_leaderboard').show();
+			} else {
+				$('#team_leaderboard').hide();
+			}
+			var primary_leaderboard = race.leaderboard.meta.primary_leaderboard;
+      winner = race.leaderboard[primary_leaderboard][0].callsign;
+			if(winner in pilotColors){
+				winnerColor = pilotColors[winner];
+				//winnerContrastColor = contrastColor(winnerColor);
+			}
+		});
+
+		socket.on('prestage_ready', function (msg) {
+			request_time = new Date();
+		});
+
+		socket.on('stop_timer', function (msg) {
+			rotorhazard.timer.stopAll();
+		});
+	});
+
+//	function speak(obj, priority) {} // stub to prevent crashing
+
+</script>
+{% endblock %} {% block content %}
+<main class="page-stream">
+
+	<!--Display the race leaderboard-->
+	<div id="leaderboard"></div>
+
+	<div id="team_leaderboard"></div>
+
+</div>
+
+</main>
+{% endblock %}

@@ -1,0 +1,13 @@
+{
+    "name": "Pilot Rank Stream Element",
+    "author": "SkyFPV",
+    "author_uri": "https://github.com/skyfpv",
+    "description": "Adds a pilot rank stream element at http://rotorhazard.local/stream/ranks",
+    "info_uri": "https://github.com/RotorHazard/RotorHazard/",
+    "license": "RotorHazard",
+    "license_uri": "https://github.com/RotorHazard/RotorHazard/blob/main/LICENSE",
+    "version": "1.0.0",
+    "required_rhapi_version": "1.0",
+    "update_uri": null,
+    "text_domain": null
+}

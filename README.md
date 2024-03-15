@@ -1,2 +1,2 @@
-# rh_stream_display_pilot_rank
-A stream display plugin for RotorHazard which shows a styled live-rank leaderboard for use during races.
+# rh_pilot_photos
+A RotorHazard plugin which adds pilot photo stream elements
