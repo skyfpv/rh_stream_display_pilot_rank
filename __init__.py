@@ -15,7 +15,7 @@ def __(str):
 logger = logging.getLogger(__name__)
 
 #Logging
-DEBUG_LOGGING = True
+DEBUG_LOGGING = False
 
 def log(message):
     if(DEBUG_LOGGING):
@@ -48,7 +48,7 @@ def initialize(rhapi):
     #bp = Blueprint('pilotcard', __name__)
     @bp.route('/stream/ranks')
     def bp_test_page():
-        node_num = 4
+        node_num = rhapi.race.slots
         #return render_template('pilotcard.html', __=__,)
         return render_template('ranks.html', serverInfo=None,
             getOption=rhapi.db.option, __=rhapi.__, num_nodes=node_num)
@@ -61,53 +61,46 @@ class RUManager():
         self.rhapi = rhapi
         
         #websocket listeners
-        #self.rhapi.ui.socket_listen("get_pilot_photo", self.handleGetPilotPhoto)
+        self.rhapi.ui.socket_listen("get_live_ranks", self.handleGetLiveRanks)
 
-    def handleGetPilotPhoto(self, args):
-        log(args)
-        node = int(args["node"])
-        if(len(self.rhapi.race.pilots)-1>=node):
-            pilotId = self.rhapi.race.pilots[node]
-        else:
-            pilotId = None
-        self.sendPhotoURLByPilotId(pilotId, node)
+        #register event handlers
+        self.rhapi.events.on(Evt.HEAT_SET, self.handleUpdateLiveRankings)
+        self.rhapi.events.on(Evt.RACE_LAP_RECORDED, self.handleUpdateLiveRankings)
 
-    def sendPhotoURLByPilotId(self, pilotId, node):
-        if(pilotId!=None):
-            pilotPhotoURL = self.rhapi.db.pilot_attribute_value(pilotId, PILOT_URL_FIELD_NAME)
-            secondaryColor = self.rhapi.db.pilot_attribute_value(pilotId, PILOT_SECONDARY_COLOR_FIELD_NAME)
-        else:
-            pilotPhotoURL = ""
-            secondaryColor = "#000000"
-        #if the secondary color is invalid, use the primary color
-        if(self.isValidHexColor(secondaryColor)==False):
-            seatColor = self.rhapi.race.seat_colors[node]
-            seatColor = self.colorToHex(seatColor)
-            secondaryColor = seatColor
+    def handleUpdateLiveRankings(self, args):
+        self.handleGetLiveRanks()
+
+    def handleGetLiveRanks(self):
+        log("handleGetLiveRanks")
         
-        log("url: "+str(pilotPhotoURL))
-        log("pilotId: "+str(pilotId))
-        if(pilotId!=None and pilotId!=0):
-            pilot = self.rhapi.db.pilot_by_id(pilotId)
-            callsign = pilot.callsign
+        liveRanks = []
+        if(self.rhapi.race.status==RaceStatus.RACING):
+            results = self.rhapi.race.results
+            meta = results["meta"]
+            primary_leaderboard = meta["primary_leaderboard"]
+            leaderboard = results[primary_leaderboard]
+            log(str(leaderboard))
+            for pilotResult in leaderboard:
+                liveRanks.append(self.getPilotRank(pilotResult))
         else:
-            callsign = None
-        body = {"callsign":callsign, "url": pilotPhotoURL, "node": node, "secondaryColor": secondaryColor}
-        log("-> "+str(body))
-        self.rhapi.ui.socket_broadcast("pilot_photo", body)
+            results = self.rhapi.race.results
+            meta = results["meta"]
+            primary_leaderboard = meta["primary_leaderboard"]
+            leaderboard = results[primary_leaderboard]
+            log(str(leaderboard))
+            for pilotResult in leaderboard:
+                liveRanks.append(self.getPilotRank(pilotResult))
+
+        self.rhapi.ui.socket_broadcast("live_ranks", liveRanks)
+            
+    def getPilotRank(self, result):
+        seatColor = self.rhapi.race.seat_colors[result["node"]]
+        seatColor = self.colorToHex(seatColor)
+        callsign = result["callsign"]
+        result["color"] = seatColor
+        pilotRank = result
+        log(pilotRank)
+        return pilotRank
 
     def colorToHex(self, colorInt):
         return '#' + format(colorInt, '06x')
-    
-    def isValidHex(self, string):
-        pattern = re.compile(r'^[a-fA-F0-9#]+$')
-        return bool(pattern.match(string))
-    
-    def isValidHexColor(self, color):
-        valid = True
-        if(color==None):
-            valid = False
-        else:
-            if(len(color)!=7) or (self.isValidHex(color)==False):
-                valid = False
-        return valid
